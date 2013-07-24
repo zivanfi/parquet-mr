@@ -1,3 +1,4 @@
+
 parquet
 parquet.avro
 parquet.bytes
@@ -28,6 +29,12 @@ parquet.hadoop.mapred
 parquet.hadoop.metadata
 parquet.hadoop.thrift
 parquet.hadoop.util
+parquet.hive
+parquet.hive.convert
+parquet.hive.read
+parquet.hive.serde
+parquet.hive.writable
+parquet.hive.write
 parquet.io
 parquet.io.api
 parquet.pig
