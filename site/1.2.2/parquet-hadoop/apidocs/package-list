@@ -1,0 +1,11 @@
+parquet.format.converter
+parquet.hadoop
+parquet.hadoop.api
+parquet.hadoop.codec
+parquet.hadoop.example
+parquet.hadoop.mapred
+parquet.hadoop.metadata
+parquet.hadoop.util
+parquet.hadoop.util.counters
+parquet.hadoop.util.counters.mapred
+parquet.hadoop.util.counters.mapreduce

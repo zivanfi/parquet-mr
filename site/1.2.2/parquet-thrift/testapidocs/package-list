@@ -1,0 +1,5 @@
+parquet.hadoop.thrift
+parquet.thrift
+parquet.thrift.projection
+parquet.thrift.test
+parquet.thrift.test.compat
