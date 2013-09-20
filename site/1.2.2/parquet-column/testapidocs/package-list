@@ -1,0 +1,9 @@
+parquet.column.mem
+parquet.column.page.mem
+parquet.column.values.bitpacking
+parquet.column.values.boundedint
+parquet.column.values.dictionary
+parquet.column.values.rle
+parquet.io
+parquet.parser
+parquet.schema
