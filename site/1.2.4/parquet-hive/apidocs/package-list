@@ -1,0 +1,6 @@
+parquet.hive
+parquet.hive.convert
+parquet.hive.read
+parquet.hive.serde
+parquet.hive.writable
+parquet.hive.write
