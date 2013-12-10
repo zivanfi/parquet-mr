@@ -1,0 +1,5 @@
+parquet.hadoop.thrift
+parquet.thrift
+parquet.thrift.projection
+parquet.thrift.projection.amend
+parquet.thrift.struct
