@@ -389,6 +389,8 @@ public class TestParquetMetadataConverter {
 
     Assert.assertArrayEquals("Min should match", min, formatStats.getMin());
     Assert.assertArrayEquals("Max should match", max, formatStats.getMax());
+    Assert.assertArrayEquals("Min_value should match", min, formatStats.getMin_value());
+    Assert.assertArrayEquals("Max_value should match", max, formatStats.getMax_value());
     Assert.assertEquals("Num nulls should match",
         3004, formatStats.getNull_count());
 
@@ -399,6 +401,8 @@ public class TestParquetMetadataConverter {
 
     Assert.assertFalse("Min should not be set", formatStats.isSetMin());
     Assert.assertFalse("Max should not be set", formatStats.isSetMax());
+    Assert.assertFalse("Min_value should not be set", formatStats.isSetMin_value());
+    Assert.assertFalse("Max_value should not be set", formatStats.isSetMax_value());
     Assert.assertFalse("Num nulls should not be set",
         formatStats.isSetNull_count());
 
@@ -426,6 +430,10 @@ public class TestParquetMetadataConverter {
         min, BytesUtils.bytesToInt(formatStats.getMin()));
     Assert.assertEquals("Max should match",
         max, BytesUtils.bytesToInt(formatStats.getMax()));
+    Assert.assertEquals("Min_value should match",
+        min, BytesUtils.bytesToInt(formatStats.getMin_value()));
+    Assert.assertEquals("Max_value should match",
+        max, BytesUtils.bytesToInt(formatStats.getMax_value()));
     Assert.assertEquals("Num nulls should match",
         3004, formatStats.getNull_count());
   }
@@ -447,6 +455,10 @@ public class TestParquetMetadataConverter {
         min, BytesUtils.bytesToLong(formatStats.getMin()));
     Assert.assertEquals("Max should match",
         max, BytesUtils.bytesToLong(formatStats.getMax()));
+    Assert.assertEquals("Min_value should match",
+        min, BytesUtils.bytesToLong(formatStats.getMin_value()));
+    Assert.assertEquals("Max_value should match",
+        max, BytesUtils.bytesToLong(formatStats.getMax_value()));
     Assert.assertEquals("Num nulls should match",
         3004, formatStats.getNull_count());
   }
@@ -469,6 +481,12 @@ public class TestParquetMetadataConverter {
         0.000001);
     Assert.assertEquals("Max should match",
         max, Float.intBitsToFloat(BytesUtils.bytesToInt(formatStats.getMax())),
+        0.000001);
+    Assert.assertEquals("Min_value should match",
+        min, Float.intBitsToFloat(BytesUtils.bytesToInt(formatStats.getMin_value())),
+        0.000001);
+    Assert.assertEquals("Max_value should match",
+        max, Float.intBitsToFloat(BytesUtils.bytesToInt(formatStats.getMax_value())),
         0.000001);
     Assert.assertEquals("Num nulls should match",
         3004, formatStats.getNull_count());
@@ -493,6 +511,12 @@ public class TestParquetMetadataConverter {
     Assert.assertEquals("Max should match",
         max, Double.longBitsToDouble(BytesUtils.bytesToLong(formatStats.getMax())),
         0.000001);
+    Assert.assertEquals("Min_value should match",
+        min, Double.longBitsToDouble(BytesUtils.bytesToLong(formatStats.getMin_value())),
+        0.000001);
+    Assert.assertEquals("Max_value should match",
+        max, Double.longBitsToDouble(BytesUtils.bytesToLong(formatStats.getMax_value())),
+        0.000001);
     Assert.assertEquals("Num nulls should match",
         3004, formatStats.getNull_count());
   }
@@ -514,23 +538,24 @@ public class TestParquetMetadataConverter {
         min, BytesUtils.bytesToBool(formatStats.getMin()));
     Assert.assertEquals("Max should match",
         max, BytesUtils.bytesToBool(formatStats.getMax()));
+    Assert.assertEquals("Min_value should match",
+        min, BytesUtils.bytesToBool(formatStats.getMin_value()));
+    Assert.assertEquals("Max_value should match",
+        max, BytesUtils.bytesToBool(formatStats.getMax_value()));
     Assert.assertEquals("Num nulls should match",
         3004, formatStats.getNull_count());
   }
 
   @Test
-  public void testIgnoreStatsWithSignedSortOrder() {
+  public void testIgnoreDeprecatedStatsWithSignedSortOrder() {
     ParquetMetadataConverter converter = new ParquetMetadataConverter();
-    BinaryStatistics stats = new BinaryStatistics();
-    stats.incrementNumNulls();
-    stats.updateStats(Binary.fromString("A"));
-    stats.incrementNumNulls();
-    stats.updateStats(Binary.fromString("z"));
-    stats.incrementNumNulls();
+    org.apache.parquet.format.Statistics formatStats = new org.apache.parquet.format.Statistics();
+    formatStats.setMin("A".getBytes());
+    formatStats.setMax("z".getBytes());
 
     Statistics convertedStats = converter.fromParquetStatistics(
         Version.FULL_VERSION,
-        ParquetMetadataConverter.toParquetStatistics(stats),
+        formatStats,
         Types.required(PrimitiveTypeName.BINARY)
             .as(OriginalType.UTF8).named("b"));
 
@@ -538,18 +563,15 @@ public class TestParquetMetadataConverter {
   }
 
   @Test
-  public void testStillUseStatsWithSignedSortOrderIfSingleValue() {
+  public void testStillUseDeprecatedStatsWithSignedSortOrderIfSingleValue() {
     ParquetMetadataConverter converter = new ParquetMetadataConverter();
-    BinaryStatistics stats = new BinaryStatistics();
-    stats.incrementNumNulls();
-    stats.updateStats(Binary.fromString("A"));
-    stats.incrementNumNulls();
-    stats.updateStats(Binary.fromString("A"));
-    stats.incrementNumNulls();
+    org.apache.parquet.format.Statistics formatStats = new org.apache.parquet.format.Statistics();
+    formatStats.setMin("A".getBytes());
+    formatStats.setMax("A".getBytes());
 
     Statistics convertedStats = converter.fromParquetStatistics(
         Version.FULL_VERSION,
-        ParquetMetadataConverter.toParquetStatistics(stats),
+        formatStats,
         Types.required(PrimitiveTypeName.BINARY)
             .as(OriginalType.UTF8).named("b"));
 
@@ -558,30 +580,45 @@ public class TestParquetMetadataConverter {
   }
 
   @Test
-  public void testUseStatsWithSignedSortOrder() {
+  public void testUseDeprecatedStatsWithSignedSortOrder() {
     // override defaults and use stats that were accumulated using signed order
     Configuration conf = new Configuration();
     conf.setBoolean("parquet.strings.signed-min-max.enabled", true);
 
     ParquetMetadataConverter converter = new ParquetMetadataConverter(conf);
-    BinaryStatistics stats = new BinaryStatistics();
-    stats.incrementNumNulls();
-    stats.updateStats(Binary.fromString("A"));
-    stats.incrementNumNulls();
-    stats.updateStats(Binary.fromString("z"));
-    stats.incrementNumNulls();
+    org.apache.parquet.format.Statistics formatStats = new org.apache.parquet.format.Statistics();
+    formatStats.setMin("A".getBytes());
+    formatStats.setMax("z".getBytes());
 
     Statistics convertedStats = converter.fromParquetStatistics(
         Version.FULL_VERSION,
-        ParquetMetadataConverter.toParquetStatistics(stats),
+        formatStats,
         Types.required(PrimitiveTypeName.BINARY)
             .as(OriginalType.UTF8).named("b"));
 
-    Assert.assertFalse("Stats should not be empty", convertedStats.isEmpty());
-    Assert.assertEquals("Should have 3 nulls", 3, convertedStats.getNumNulls());
     Assert.assertEquals("Should have correct min (unsigned sort)",
         Binary.fromString("A"), convertedStats.genericGetMin());
     Assert.assertEquals("Should have correct max (unsigned sort)",
         Binary.fromString("z"), convertedStats.genericGetMax());
+  }
+
+  @Test
+  public void testIgnoreDeprecatedFieldsInFavourOfNewFields() {
+    ParquetMetadataConverter converter = new ParquetMetadataConverter();
+    org.apache.parquet.format.Statistics formatStats = new org.apache.parquet.format.Statistics();
+    formatStats.setMin(BytesUtils.intToBytes(1));
+    formatStats.setMax(BytesUtils.intToBytes(2));
+    formatStats.setMin_value(BytesUtils.intToBytes(3));
+    formatStats.setMax_value(BytesUtils.intToBytes(4));
+
+    Statistics convertedStats = converter.fromParquetStatistics(
+        Version.FULL_VERSION,
+        formatStats,
+        Types.required(PrimitiveTypeName.INT32).named("i"));
+
+    Assert.assertEquals("Should have correct min (based on min_value)",
+        3, convertedStats.genericGetMin());
+    Assert.assertEquals("Should have correct max (based on max_value)",
+        4, convertedStats.genericGetMax());
   }
 }

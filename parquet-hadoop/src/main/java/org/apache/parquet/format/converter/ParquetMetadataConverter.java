@@ -308,6 +308,9 @@ public class ParquetMetadataConverter {
     if (!statistics.isEmpty() && statistics.isSmallerThan(MAX_STATS_SIZE)) {
       stats.setNull_count(statistics.getNumNulls());
       if (statistics.hasNonNullValue()) {
+        stats.setMax_value(statistics.getMaxBytes());
+        stats.setMin_value(statistics.getMinBytes());
+        // Deprecated fields
         stats.setMax(statistics.getMaxBytes());
         stats.setMin(statistics.getMinBytes());
       }
@@ -340,19 +343,23 @@ public class ParquetMetadataConverter {
     org.apache.parquet.column.statistics.Statistics stats = org.apache.parquet.column.statistics.Statistics.getStatsBasedOnType(type);
     // If there was no statistics written to the footer, create an empty Statistics object and return
 
-    boolean isSet = statistics != null && statistics.isSetMax() && statistics.isSetMin();
-    boolean maxEqualsMin = isSet ? Arrays.equals(statistics.getMin(), statistics.getMax()) : false;
-    boolean sortOrdersMatch = SortOrder.SIGNED == typeSortOrder;
-    // NOTE: See docs in CorruptStatistics for explanation of why this check is needed
-    // The sort order is checked to avoid returning min/max stats that are not
-    // valid with the type's sort order. Currently, all stats are aggregated
-    // using a signed ordering, which isn't valid for strings or unsigned ints.
-    if (statistics != null && !CorruptStatistics.shouldIgnoreStatistics(createdBy, type) &&
-        ( sortOrdersMatch || maxEqualsMin)) {
-      if (isSet) {
-        stats.setMinMaxFromBytes(statistics.min.array(), statistics.max.array());
-      }
+    if (statistics != null) {
       stats.setNumNulls(statistics.null_count);
+      if (statistics.isSetMin_value() && statistics.isSetMax_value()) {
+        stats.setMinMaxFromBytes(statistics.min_value.array(), statistics.max_value.array());
+      } else if (statistics.isSetMax() && statistics.isSetMin()) {
+        // Deprecated fields
+        boolean maxEqualsMin = Arrays.equals(statistics.getMin(), statistics.getMax());
+        boolean sortOrdersMatch = SortOrder.SIGNED == typeSortOrder;
+        // NOTE: See docs in CorruptStatistics for explanation of why this check is needed
+        // The sort order is checked to avoid returning min/max stats that are not
+        // valid with the type's sort order. Currently, all stats are aggregated
+        // using a signed ordering, which isn't valid for strings or unsigned ints.
+        if (!CorruptStatistics.shouldIgnoreStatistics(createdBy, type) &&
+            (sortOrdersMatch || maxEqualsMin)) {
+          stats.setMinMaxFromBytes(statistics.min.array(), statistics.max.array());
+        }
+      }
     }
     return stats;
   }
