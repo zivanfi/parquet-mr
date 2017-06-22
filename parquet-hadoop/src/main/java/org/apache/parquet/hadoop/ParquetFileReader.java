@@ -73,10 +73,12 @@ import org.apache.parquet.column.page.DataPageV2;
 import org.apache.parquet.column.page.DictionaryPage;
 import org.apache.parquet.column.page.PageReadStore;
 import org.apache.parquet.hadoop.metadata.ColumnPath;
+import org.apache.parquet.format.ColumnOrder;
 import org.apache.parquet.format.DataPageHeader;
 import org.apache.parquet.format.DataPageHeaderV2;
 import org.apache.parquet.format.DictionaryPageHeader;
 import org.apache.parquet.format.PageHeader;
+import org.apache.parquet.format.TypeDefinedOrder;
 import org.apache.parquet.format.Util;
 import org.apache.parquet.format.converter.ParquetMetadataConverter;
 import org.apache.parquet.format.converter.ParquetMetadataConverter.MetadataFilter;
@@ -857,6 +859,8 @@ public class ParquetFileReader implements Closeable {
       DictionaryPage dictionaryPage = null;
       PrimitiveType type = getFileMetaData().getSchema()
           .getType(descriptor.col.getPath()).asPrimitiveType();
+      // TODO get columnOrder from metadata
+      ColumnOrder columnOrder = ColumnOrder.TYPE_ORDER(new TypeDefinedOrder());
       long valuesCountReadSoFar = 0;
       while (valuesCountReadSoFar < descriptor.metadata.getValueCount()) {
         PageHeader pageHeader = readPageHeader();
@@ -887,7 +891,8 @@ public class ParquetFileReader implements Closeable {
                     converter.fromParquetStatistics(
                         getFileMetaData().getCreatedBy(),
                         dataHeaderV1.getStatistics(),
-                        type),
+                        type,
+                        columnOrder),
                     converter.getEncoding(dataHeaderV1.getRepetition_level_encoding()),
                     converter.getEncoding(dataHeaderV1.getDefinition_level_encoding()),
                     converter.getEncoding(dataHeaderV1.getEncoding())
@@ -910,7 +915,8 @@ public class ParquetFileReader implements Closeable {
                     converter.fromParquetStatistics(
                         getFileMetaData().getCreatedBy(),
                         dataHeaderV2.getStatistics(),
-                        type),
+                        type,
+                        columnOrder),
                     dataHeaderV2.isIs_compressed()
                     ));
             valuesCountReadSoFar += dataHeaderV2.getNum_values();

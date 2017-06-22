@@ -47,6 +47,7 @@ import org.apache.parquet.schema.MessageType;
 import org.apache.parquet.schema.MessageTypeParser;
 import org.apache.parquet.schema.PrimitiveType;
 import org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName;
+import org.apache.parquet.schema.Types;
 
 import java.io.File;
 import java.io.IOException;
@@ -433,8 +434,8 @@ public class TestParquetFileWriter {
     Statistics thriftStats =
         org.apache.parquet.format.converter.ParquetMetadataConverter.toParquetStatistics(parquetMRstats);
     LongStatistics convertedBackStats =
-        (LongStatistics) org.apache.parquet.format.converter.ParquetMetadataConverter.fromParquetStatistics(
-            createdBy, thriftStats, PrimitiveTypeName.INT64);
+        (LongStatistics) new org.apache.parquet.format.converter.ParquetMetadataConverter().fromParquetStatistics(
+            createdBy, thriftStats, Types.required(PrimitiveTypeName.INT64).named("i"), null);
 
     assertEquals(parquetMRstats.getMax(), convertedBackStats.getMax());
     assertEquals(parquetMRstats.getMin(), convertedBackStats.getMin());

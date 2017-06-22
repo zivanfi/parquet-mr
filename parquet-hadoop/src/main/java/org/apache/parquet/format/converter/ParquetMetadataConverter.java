@@ -42,6 +42,7 @@ import org.apache.parquet.format.PageEncodingStats;
 import org.apache.parquet.hadoop.metadata.ColumnPath;
 import org.apache.parquet.format.ColumnChunk;
 import org.apache.parquet.format.ColumnMetaData;
+import org.apache.parquet.format.ColumnOrder;
 import org.apache.parquet.format.ConvertedType;
 import org.apache.parquet.format.DataPageHeader;
 import org.apache.parquet.format.DataPageHeaderV2;
@@ -56,6 +57,7 @@ import org.apache.parquet.format.RowGroup;
 import org.apache.parquet.format.SchemaElement;
 import org.apache.parquet.format.Statistics;
 import org.apache.parquet.format.Type;
+import org.apache.parquet.format.TypeDefinedOrder;
 import org.apache.parquet.hadoop.metadata.BlockMetaData;
 import org.apache.parquet.hadoop.metadata.ColumnChunkMetaData;
 import org.apache.parquet.hadoop.metadata.CompressionCodecName;
@@ -84,17 +86,17 @@ public class ParquetMetadataConverter {
   private static final Logger LOG = LoggerFactory.getLogger(ParquetMetadataConverter.class);
 
   private final boolean useSignedStringMinMax;
+  private final boolean considerOldStats;
+  private final boolean considerNewStats;
 
   public ParquetMetadataConverter() {
-    this(false);
+    this(new Configuration());
   }
 
   public ParquetMetadataConverter(Configuration conf) {
-    this(conf.getBoolean("parquet.strings.signed-min-max.enabled", false));
-  }
-
-  private ParquetMetadataConverter(boolean useSignedStringMinMax) {
-    this.useSignedStringMinMax = useSignedStringMinMax;
+    useSignedStringMinMax = conf.getBoolean("parquet.strings.signed-min-max.enabled", false);
+    considerOldStats = conf.getBoolean("parquet.stats.consider.old", true);
+    considerNewStats = conf.getBoolean("parquet.stats.consider.new", true);
   }
 
   // NOTE: this cache is for memory savings, not cpu savings, and is used to de-duplicate
@@ -320,34 +322,49 @@ public class ParquetMetadataConverter {
 
   /**
    * @deprecated Replaced by {@link #fromParquetStatistics(
-   * String createdBy, Statistics statistics, PrimitiveTypeName type)}
+   * String createdBy, Statistics statistics, PrimitiveTypeName type, ColumnOrder columnOrder)}
    */
+  /*
   @Deprecated
   public static org.apache.parquet.column.statistics.Statistics fromParquetStatistics(Statistics statistics, PrimitiveTypeName type) {
-    return fromParquetStatistics(null, statistics, type);
+    return new ParquetMetadataConverter().fromParquetStatistics(null, statistics, type);
   }
+  */
 
   /**
-   * @deprecated Use {@link #fromParquetStatistics(String, Statistics, PrimitiveType)} instead.
+   * @deprecated Use {@link #fromParquetStatistics(String, Statistics, PrimitiveType, ColumnOrder)} instead.
    */
+  /*
   @Deprecated
   public static org.apache.parquet.column.statistics.Statistics fromParquetStatistics
       (String createdBy, Statistics statistics, PrimitiveTypeName type) {
-    return fromParquetStatisticsInternal(createdBy, statistics, type, defaultSortOrder(type));
+    return new ParquetMetadataConverter()
+      .fromParquetStatisticsInternal(createdBy, statistics, type, defaultSortOrder(type), null);
   }
+  */
 
   // Visible for testing
-  static org.apache.parquet.column.statistics.Statistics fromParquetStatisticsInternal
-      (String createdBy, Statistics statistics, PrimitiveTypeName type, SortOrder typeSortOrder) {
+  org.apache.parquet.column.statistics.Statistics fromParquetStatisticsInternal
+      (String createdBy, Statistics statistics, PrimitiveTypeName type, SortOrder typeSortOrder, ColumnOrder columnOrder) {
     // create stats object based on the column type
     org.apache.parquet.column.statistics.Statistics stats = org.apache.parquet.column.statistics.Statistics.getStatsBasedOnType(type);
     // If there was no statistics written to the footer, create an empty Statistics object and return
 
     if (statistics != null) {
       stats.setNumNulls(statistics.null_count);
-      if (statistics.isSetMin_value() && statistics.isSetMax_value()) {
-        stats.setMinMaxFromBytes(statistics.min_value.array(), statistics.max_value.array());
-      } else if (statistics.isSetMax() && statistics.isSetMin()) {
+      boolean isMinMaxSet = false;
+
+      if (considerNewStats && statistics.isSetMin_value() && statistics.isSetMax_value()) {
+        if (columnOrder == null || !columnOrder.isSet()) {
+          LOG.warn("Invalid statistics: min_value and max_value are set, but column_order is not set.");
+        } else if (!columnOrder.isSetTYPE_ORDER()) {
+          LOG.info("Unsupported column_order, ignoring statistics.");
+        } else {
+          stats.setMinMaxFromBytes(statistics.min_value.array(), statistics.max_value.array());
+          isMinMaxSet = true;
+        }
+      }
+      if (!isMinMaxSet && considerOldStats && statistics.isSetMax() && statistics.isSetMin()) {
         // Deprecated fields
         boolean maxEqualsMin = Arrays.equals(statistics.getMin(), statistics.getMax());
         boolean sortOrdersMatch = SortOrder.SIGNED == typeSortOrder;
@@ -358,18 +375,32 @@ public class ParquetMetadataConverter {
         if (!CorruptStatistics.shouldIgnoreStatistics(createdBy, type) &&
             (sortOrdersMatch || maxEqualsMin)) {
           stats.setMinMaxFromBytes(statistics.min.array(), statistics.max.array());
+          isMinMaxSet = true;
         }
       }
     }
     return stats;
   }
 
+  /**
+   * @deprecated Use {@link #fromParquetStatistics(String, Statistics, PrimitiveType, ColumnOrder)} instead.
+   */
+  /*
   public org.apache.parquet.column.statistics.Statistics fromParquetStatistics(
       String createdBy, Statistics statistics, PrimitiveType type) {
     SortOrder expectedOrder = overrideSortOrderToSigned(type) ?
         SortOrder.SIGNED : sortOrder(type);
     return fromParquetStatisticsInternal(
-        createdBy, statistics, type.getPrimitiveTypeName(), expectedOrder);
+        createdBy, statistics, type.getPrimitiveTypeName(), expectedOrder, null);
+  }
+  */
+
+  public org.apache.parquet.column.statistics.Statistics fromParquetStatistics(
+      String createdBy, Statistics statistics, PrimitiveType type, ColumnOrder columnOrder) {
+    SortOrder expectedOrder = overrideSortOrderToSigned(type) ?
+        SortOrder.SIGNED : sortOrder(type);
+    return fromParquetStatisticsInternal(
+        createdBy, statistics, type.getPrimitiveTypeName(), expectedOrder, columnOrder);
   }
 
   /**
@@ -817,13 +848,21 @@ public class ParquetMetadataConverter {
         blockMetaData.setTotalByteSize(rowGroup.getTotal_byte_size());
         List<ColumnChunk> columns = rowGroup.getColumns();
         String filePath = columns.get(0).getFile_path();
-        for (ColumnChunk columnChunk : columns) {
+        boolean hasColumnOrders = parquetMetadata.column_orders != null;
+        if (hasColumnOrders && parquetMetadata.column_orders.size() != columns.size()) {
+          LOG.warn("Ingoring invalid column_orders (size does not match column count).");
+          hasColumnOrders = false;
+        }
+        for (int colIndex = 0; colIndex < columns.size(); ++colIndex) {
+          ColumnChunk columnChunk = columns.get(colIndex);
           if ((filePath == null && columnChunk.getFile_path() != null)
               || (filePath != null && !filePath.equals(columnChunk.getFile_path()))) {
             throw new ParquetDecodingException("all column chunks of the same row group must be in the same file for now");
           }
           ColumnMetaData metaData = columnChunk.meta_data;
           ColumnPath path = getPath(metaData);
+          ColumnOrder columnOrder =
+            hasColumnOrders ? parquetMetadata.column_orders.get(colIndex) : null;
           ColumnChunkMetaData column = ColumnChunkMetaData.get(
               path,
               messageType.getType(path.toArray()).asPrimitiveType().getPrimitiveTypeName(),
@@ -833,7 +872,8 @@ public class ParquetMetadataConverter {
               fromParquetStatistics(
                   parquetMetadata.getCreated_by(),
                   metaData.statistics,
-                  messageType.getType(path.toArray()).asPrimitiveType()),
+                  messageType.getType(path.toArray()).asPrimitiveType(),
+                  columnOrder),
               metaData.data_page_offset,
               metaData.dictionary_page_offset,
               metaData.num_values,
