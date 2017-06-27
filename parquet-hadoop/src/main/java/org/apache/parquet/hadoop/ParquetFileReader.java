@@ -51,7 +51,6 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 
-import org.apache.hadoop.conf.Configurable;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
@@ -78,7 +77,6 @@ import org.apache.parquet.format.DataPageHeader;
 import org.apache.parquet.format.DataPageHeaderV2;
 import org.apache.parquet.format.DictionaryPageHeader;
 import org.apache.parquet.format.PageHeader;
-import org.apache.parquet.format.TypeDefinedOrder;
 import org.apache.parquet.format.Util;
 import org.apache.parquet.format.converter.ParquetMetadataConverter;
 import org.apache.parquet.format.converter.ParquetMetadataConverter.MetadataFilter;
@@ -834,6 +832,7 @@ public class ParquetFileReader implements Closeable {
   private class Chunk extends ByteBufferInputStream {
 
     private final ChunkDescriptor descriptor;
+    private final ColumnOrder columnOrder;
 
     /**
      *
@@ -841,9 +840,10 @@ public class ParquetFileReader implements Closeable {
      * @param data contains the chunk data at offset
      * @param offset where the chunk starts in offset
      */
-    public Chunk(ChunkDescriptor descriptor, ByteBuffer data, int offset) {
+    public Chunk(ChunkDescriptor descriptor, ByteBuffer data, int offset, ColumnOrder columnOrder) {
       super(data, offset, descriptor.size);
       this.descriptor = descriptor;
+      this.columnOrder = columnOrder;
     }
 
     protected PageHeader readPageHeader() throws IOException {
@@ -859,8 +859,6 @@ public class ParquetFileReader implements Closeable {
       DictionaryPage dictionaryPage = null;
       PrimitiveType type = getFileMetaData().getSchema()
           .getType(descriptor.col.getPath()).asPrimitiveType();
-      // TODO get columnOrder from metadata
-      ColumnOrder columnOrder = ColumnOrder.TYPE_ORDER(new TypeDefinedOrder());
       long valuesCountReadSoFar = 0;
       while (valuesCountReadSoFar < descriptor.metadata.getValueCount()) {
         PageHeader pageHeader = readPageHeader();
@@ -976,8 +974,8 @@ public class ParquetFileReader implements Closeable {
      * @param offset where the chunk starts in data
      * @param f the file stream positioned at the end of this chunk
      */
-    private WorkaroundChunk(ChunkDescriptor descriptor, ByteBuffer byteBuf, int offset, SeekableInputStream f) {
-      super(descriptor, byteBuf, offset);
+    private WorkaroundChunk(ChunkDescriptor descriptor, ByteBuffer byteBuf, int offset, SeekableInputStream f, ColumnOrder columnOrder) {
+      super(descriptor, byteBuf, offset, columnOrder);
       this.f = f;
     }
 
@@ -1079,6 +1077,13 @@ public class ParquetFileReader implements Closeable {
      * @throws IOException
      */
     public List<Chunk> readAll(SeekableInputStream f) throws IOException {
+      List<ColumnOrder> columnOrders = getFileMetaData().getColumnOrders();
+      boolean hasColumnOrders = columnOrders != null;
+      if (hasColumnOrders && columnOrders.size() != chunks.size()) {
+        LOG.warn("Ignoring invalid column_orders (size does not match column count).");
+        hasColumnOrders = false;
+      }
+      
       List<Chunk> result = new ArrayList<Chunk>(chunks.size());
       f.seek(offset);
 
@@ -1091,11 +1096,13 @@ public class ParquetFileReader implements Closeable {
       int currentChunkOffset = 0;
       for (int i = 0; i < chunks.size(); i++) {
         ChunkDescriptor descriptor = chunks.get(i);
+        ColumnOrder columnOrder = hasColumnOrders ? columnOrders.get(i) : null;
+
         if (i < chunks.size() - 1) {
-          result.add(new Chunk(descriptor, chunksByteBuffer, currentChunkOffset));
+          result.add(new Chunk(descriptor, chunksByteBuffer, currentChunkOffset, columnOrder));
         } else {
           // because of a bug, the last chunk might be larger than descriptor.size
-          result.add(new WorkaroundChunk(descriptor, chunksByteBuffer, currentChunkOffset, f));
+          result.add(new WorkaroundChunk(descriptor, chunksByteBuffer, currentChunkOffset, f, columnOrder));
         }
         currentChunkOffset += descriptor.size;
       }

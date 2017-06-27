@@ -22,9 +22,15 @@ import static java.util.Collections.unmodifiableMap;
 import static org.apache.parquet.Preconditions.checkNotNull;
 
 import java.io.Serializable;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
 import java.util.Map;
 
+import org.apache.parquet.format.ColumnOrder;
 import org.apache.parquet.schema.MessageType;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 
 /**
@@ -42,16 +48,43 @@ public final class FileMetaData implements Serializable {
 
   private final String createdBy;
 
+  private final List<ColumnOrder> columnOrders;
+
+  private static final Logger LOG = LoggerFactory.getLogger(FileMetaData.class);
+
   /**
+   * @deprecated Use FileMetaData(MessageType, Map<String, String>,
+   *   String, List<ColumnOrder>) instead.
+   *
    * @param schema the schema for the file
    * @param keyValueMetaData the app specific metadata
    * @param createdBy the description of the library that created the file
    */
   public FileMetaData(MessageType schema, Map<String, String> keyValueMetaData, String createdBy) {
+    this(schema, keyValueMetaData, createdBy, null);
+  }
+
+  /**
+   * @param schema the schema for the file
+   * @param keyValueMetaData the app specific metadata
+   * @param createdBy the description of the library that created the file
+   * @param columnOrders sort order used for each column in this file
+   */
+  public FileMetaData(MessageType schema, Map<String, String> keyValueMetaData, String createdBy,
+      List<ColumnOrder> columnOrders) {
     super();
     this.schema = checkNotNull(schema, "schema");
     this.keyValueMetaData = unmodifiableMap(checkNotNull(keyValueMetaData, "keyValueMetaData"));
     this.createdBy = createdBy;
+    int columnCount = schema.getFieldCount();
+    if (columnOrders != null && columnOrders.size() != columnCount) {
+      LOG.warn("Ignoring invalid column_orders (size does not match column count).");
+      columnOrders = null;
+    }
+    if (columnOrders == null) {
+      columnOrders = new ArrayList<>(Collections.nCopies(columnCount, (ColumnOrder) null));
+    }
+    this.columnOrders = columnOrders;
   }
 
   /**
@@ -61,9 +94,17 @@ public final class FileMetaData implements Serializable {
     return schema;
   }
 
+  /**
+   * @return the column orders for the file
+   */
+  public List<ColumnOrder> getColumnOrders() {
+    return columnOrders;
+  }
+
   @Override
   public String toString() {
-    return "FileMetaData{schema: "+schema+ ", metadata: " + keyValueMetaData + "}";
+    return String.format("FileMetaData{schema: %s, metadata: %s, columnOrders: %s}",
+        schema, keyValueMetaData, columnOrders);
   }
 
   /**

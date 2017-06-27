@@ -31,7 +31,7 @@ import org.apache.parquet.schema.MessageType;
 
 /**
  * Merged metadata when reading from multiple files.
- * THis is to allow schema evolution
+ * This is to allow schema evolution
  *
  * @author Julien Le Dem
  *
@@ -100,7 +100,8 @@ public class GlobalMetaData implements Serializable {
       }
       mergedKeyValues.put(entry.getKey(), entry.getValue().iterator().next());
     }
-    return new FileMetaData(schema, mergedKeyValues, createdByString);
+    // TODO: Merge the columnOrder as well.
+    return new FileMetaData(schema, mergedKeyValues, createdByString, null);
   }
 
 }

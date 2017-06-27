@@ -850,7 +850,7 @@ public class ParquetMetadataConverter {
         String filePath = columns.get(0).getFile_path();
         boolean hasColumnOrders = parquetMetadata.column_orders != null;
         if (hasColumnOrders && parquetMetadata.column_orders.size() != columns.size()) {
-          LOG.warn("Ingoring invalid column_orders (size does not match column count).");
+          LOG.warn("Ignoring invalid column_orders (size does not match column count).");
           hasColumnOrders = false;
         }
         for (int colIndex = 0; colIndex < columns.size(); ++colIndex) {
@@ -895,9 +895,9 @@ public class ParquetMetadataConverter {
         keyValueMetaData.put(keyValue.key, keyValue.value);
       }
     }
-    return new ParquetMetadata(
-        new org.apache.parquet.hadoop.metadata.FileMetaData(messageType, keyValueMetaData, parquetMetadata.getCreated_by()),
-        blocks);
+    return new ParquetMetadata(new org.apache.parquet.hadoop.metadata.FileMetaData(
+        messageType, keyValueMetaData, parquetMetadata.getCreated_by(),
+        parquetMetadata.getColumn_orders()), blocks);
   }
 
   private static ColumnPath getPath(ColumnMetaData metaData) {
