@@ -35,12 +35,11 @@ public class ProtoParquetWriter<T extends MessageOrBuilder> extends ParquetWrite
   /**
    * Create a new {@link ProtoParquetWriter}.
    *
-   * @param file                 The file name to write to.
-   * @param protoMessage         Protobuf message class
-   * @param compressionCodecName Compression code to use, or CompressionCodecName.UNCOMPRESSED
-   * @param blockSize            HDFS block size
-   * @param pageSize             See parquet write up. Blocks are subdivided into pages for alignment and other purposes.
-   * @throws IOException if there is an error while writing
+   * @param file
+   * @param compressionCodecName
+   * @param blockSize
+   * @param pageSize
+   * @throws IOException
    */
   public ProtoParquetWriter(Path file, Class<? extends Message> protoMessage,
                             CompressionCodecName compressionCodecName, int blockSize,
@@ -53,13 +52,12 @@ public class ProtoParquetWriter<T extends MessageOrBuilder> extends ParquetWrite
    * Create a new {@link ProtoParquetWriter}.
    *
    * @param file                 The file name to write to.
-   * @param protoMessage         Protobuf message class
    * @param compressionCodecName Compression code to use, or CompressionCodecName.UNCOMPRESSED
    * @param blockSize            HDFS block size
    * @param pageSize             See parquet write up. Blocks are subdivided into pages for alignment and other purposes.
    * @param enableDictionary     Whether to use a dictionary to compress columns.
    * @param validating           to turn on validation using the schema
-   * @throws IOException if there is an error while writing
+   * @throws IOException
    */
   public ProtoParquetWriter(Path file, Class<? extends Message> protoMessage,
                             CompressionCodecName compressionCodecName, int blockSize,
@@ -73,8 +71,7 @@ public class ProtoParquetWriter<T extends MessageOrBuilder> extends ParquetWrite
    * page size is 1 MB.  Default compression is no compression. (Inherited from {@link ParquetWriter})
    *
    * @param file The file name to write to.
-   * @param protoMessage         Protobuf message class
-   * @throws IOException if there is an error while writing
+   * @throws IOException
    */
   public ProtoParquetWriter(Path file, Class<? extends Message> protoMessage) throws IOException {
     this(file, protoMessage, CompressionCodecName.UNCOMPRESSED,

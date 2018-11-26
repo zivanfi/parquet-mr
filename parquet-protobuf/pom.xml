@@ -31,7 +31,6 @@
 
   <properties>
     <elephant-bird.version>4.4</elephant-bird.version>
-    <protobuf.version>3.5.1</protobuf.version>
     <!-- allow using protoc from an alternative path -->
     <protoc.path>protoc</protoc.path>
   </properties>
@@ -86,21 +85,10 @@
     </dependency>
   </dependencies>
 
-  <dependencyManagement>
-    <dependencies>
-      <!-- com.twitter.elephantbird brings in an older version of libthrift so we force to use our own one -->
-      <dependency>
-        <groupId>org.apache.thrift</groupId>
-        <artifactId>libthrift</artifactId>
-        <version>${format.thrift.version}</version>
-      </dependency>
-    </dependencies>
-  </dependencyManagement>
-
   <developers>
     <developer>
       <id>lukasnalezenec</id>
-      <name>Lukas Nalezenec</name>
+      <name>Lukas Nalezenec</name>      
     </developer>
   </developers>
 
@@ -171,7 +159,6 @@
                 <exec failonerror="true" executable="${protoc.path}">
                   <arg value="--java_out=${project.build.directory}/generated-test-sources/java" />
                   <arg value="src/test/resources/TestProtobuf.proto" />
-                  <arg value="src/test/resources/TestProto3.proto" />
                   <arg value="-I." />
                 </exec>
               </tasks>

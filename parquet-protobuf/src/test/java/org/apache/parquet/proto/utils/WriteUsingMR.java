@@ -46,17 +46,9 @@ import static java.lang.Thread.sleep;
 public class WriteUsingMR {
 
   private static final Logger LOG = LoggerFactory.getLogger(WriteUsingMR.class);
-  private final Configuration conf;
+  Configuration conf = new Configuration();
   private static List<Message> inputMessages;
   Path outputPath;
-
-  public WriteUsingMR() {
-    this(new Configuration());
-  }
-
-  public WriteUsingMR(Configuration conf) {
-    this.conf = new Configuration();
-  }
 
   public Configuration getConfiguration() {
     return conf;

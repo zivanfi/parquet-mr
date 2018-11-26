@@ -83,6 +83,7 @@
     <cascading3.version>3.1.2</cascading3.version>
     <parquet.format.version>2.6.0</parquet.format.version>
     <previous.version>1.7.0</previous.version>
+    <protobuf.version>2.5.0</protobuf.version>
     <thrift.executable>thrift</thrift.executable>
     <format.thrift.executable>thrift</format.thrift.executable>
     <scala.version>2.10.6</scala.version>

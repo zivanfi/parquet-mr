@@ -31,6 +31,9 @@ import org.slf4j.LoggerFactory;
 import java.util.Map;
 
 
+/**
+ * @author Lukas Nalezenec
+ */
 public class ProtoReadSupport<T extends Message> extends ReadSupport<T> {
 
   private static final Logger LOG = LoggerFactory.getLogger(ProtoReadSupport.class);
@@ -49,10 +52,7 @@ public class ProtoReadSupport<T extends Message> extends ReadSupport<T> {
    * If no class is set, value from file header is used.
    * Note that the value in header is present only if the file was written
    * using parquet-protobuf project, it will fail otherwise.
-   *
-   * @param configuration a configuration
-   * @param protobufClass a fully-qualified protobuf class name
-   */
+   * */
   public static void setProtobufClass(Configuration configuration, String protobufClass) {
     configuration.set(PB_CLASS, protobufClass);
   }

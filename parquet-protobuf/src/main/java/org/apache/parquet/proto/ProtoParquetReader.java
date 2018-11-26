@@ -38,8 +38,6 @@ public class ProtoParquetReader<T extends MessageOrBuilder> extends ParquetReade
   }
 
   /**
-   * @param file a file path
-   * @throws IOException if there is an error while reading
    * @deprecated use {@link #builder(Path)}
    */
   @Deprecated
@@ -49,9 +47,6 @@ public class ProtoParquetReader<T extends MessageOrBuilder> extends ParquetReade
   }
 
   /**
-   * @param file a file path
-   * @param recordFilter an unbound record filter
-   * @throws IOException if there is an error while reading
    * @deprecated use {@link #builder(Path)}
    */
   @Deprecated
