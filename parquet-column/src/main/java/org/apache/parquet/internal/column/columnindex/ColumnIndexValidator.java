@@ -36,9 +36,10 @@ import org.apache.parquet.hadoop.metadata.ColumnChunkMetaData;
 import org.apache.parquet.hadoop.metadata.FileMetaData;
 import org.apache.parquet.io.InputFile;
 import org.apache.parquet.schema.MessageType;
-import org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName;
+import org.apache.parquet.schema.PrimitiveComparator;
+import org.apache.parquet.schema.PrimitiveType;
 
-public class ColumnIndexValidator {
+class ColumnIndexValidator {
 
   public enum Contract {
     MIN_SMALLER_THAN_ALL_VALUES,
@@ -67,7 +68,7 @@ public class ColumnIndexValidator {
   
   private static abstract class PageValidator {
     static PageValidator createPageValidator(
-        PrimitiveTypeName type,
+        PrimitiveType type,
         int rowGroupNumber,
         int columnNumber,
         int pageNumber,
@@ -77,13 +78,14 @@ public class ColumnIndexValidator {
         ByteBuffer minValue,
         ByteBuffer maxValue) {
       PageValidator pageValidator;
-      switch (type) {
+      switch (type.getPrimitiveTypeName()) {
         case FLOAT:
           pageValidator = new FloatPageValidator(minValue, maxValue);
           break;
         default:
           throw new UnsupportedOperationException(String.format("Validation of %s type is not implemented", type));
       }
+      pageValidator.comparator = type.comparator();
       pageValidator.columnReader = columnReader;
       pageValidator.rowGroupNumber = rowGroupNumber;
       pageValidator.columnNumber = columnNumber;
@@ -96,16 +98,14 @@ public class ColumnIndexValidator {
     }
 
     void validateValuesBelongingToRow() {
-      boolean allValuesBelongingToRowProcessed = false;
-      while (!allValuesBelongingToRowProcessed) {
+      do {
         if (columnReader.getCurrentDefinitionLevel() == maxDefinitionLevel) {
           validateValue();
         } else {
           ++nullCountActual;
         }
         columnReader.consume();
-        allValuesBelongingToRowProcessed = columnReader.getCurrentRepetitionLevel() == 0;
-      }
+      } while (columnReader.getCurrentRepetitionLevel() != 0);
     }
 
     public void finishPage() {
@@ -126,6 +126,7 @@ public class ColumnIndexValidator {
 
     abstract void validateValue();
     
+    protected PrimitiveComparator<?> comparator;
     protected int rowGroupNumber;
     protected int columnNumber;
     protected int pageNumber;
@@ -146,11 +147,11 @@ public class ColumnIndexValidator {
 
     void validateValue() {
       float value = columnReader.getFloat();
-      validateContract(value < minValue,
+      validateContract(comparator.compare(value, minValue) <= 0,
           Contract.MIN_SMALLER_THAN_ALL_VALUES, 
           Float.toString(value),
           Float.toString(minValue));
-      validateContract(value > maxValue,
+      validateContract(comparator.compare(value, maxValue) >= 0,
           Contract.MAX_LARGER_THAN_ALL_VALUES, 
           Float.toString(value),
           Float.toString(minValue));
@@ -186,7 +187,7 @@ public class ColumnIndexValidator {
         long rowNumber = 0;
         for (int pageNumber = 0; pageNumber < offsetIndex.getPageCount(); ++pageNumber) {
           PageValidator pageValidator = PageValidator.createPageValidator(
-              column.getPrimitiveType().getPrimitiveTypeName(), 
+              column.getPrimitiveType(), 
               rowGroupNumber, columnNumber, pageNumber,
               violations, columnReadStore.getColumnReader(column), 
               nullCounts.get(pageNumber),
