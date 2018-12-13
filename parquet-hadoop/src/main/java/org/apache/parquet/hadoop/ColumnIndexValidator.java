@@ -172,11 +172,12 @@ public class ColumnIndexValidator {
         violations.add(
             new ContractViolation(type, valueFromIndex.get(), valueFromPage.get(), rowGroupNumber,
                 columnNumber, pageNumber));
+        // throw new RuntimeException();
       }
     }
 
     abstract void validateValue();
-    void validateBoundaryOrder(ByteBuffer prevMinValue, ByteBuffer prevMaxValue, BoundaryOrder boundaryOrder) {}
+    abstract void validateBoundaryOrder(ByteBuffer prevMinValue, ByteBuffer prevMaxValue, BoundaryOrder boundaryOrder);
 
     protected PrimitiveComparator<Binary> comparator;
     protected PrimitiveStringifier stringifier;
@@ -198,6 +199,33 @@ public class ColumnIndexValidator {
     public BinaryPageValidator(ByteBuffer minValue, ByteBuffer maxValue) {
       this.minValue = Binary.fromConstantByteBuffer(minValue);
       this.maxValue = Binary.fromConstantByteBuffer(maxValue);
+    }
+
+    void validateBoundaryOrder(ByteBuffer prevMinValue, ByteBuffer prevMaxValue, BoundaryOrder boundaryOrder) {
+      switch (boundaryOrder) {
+      case ASCENDING:
+        validateContract(comparator.compare(minValue, Binary.fromConstantByteBuffer(prevMinValue)) >= 0,
+            Contract.MIN_ASCENDING,
+            () -> stringifier.stringify(minValue),
+            () -> stringifier.stringify(Binary.fromConstantByteBuffer(prevMinValue)));
+        validateContract(comparator.compare(maxValue, Binary.fromConstantByteBuffer(prevMaxValue)) >= 0,
+            Contract.MAX_ASCENDING,
+            () -> stringifier.stringify(maxValue),
+            () -> stringifier.stringify(Binary.fromConstantByteBuffer(prevMinValue)));
+        break;
+      case DESCENDING:
+        validateContract(comparator.compare(minValue, Binary.fromConstantByteBuffer(prevMinValue)) <= 0,
+            Contract.MIN_DESCENDING,
+            () -> stringifier.stringify(minValue),
+            () -> stringifier.stringify(Binary.fromConstantByteBuffer(prevMinValue)));
+        validateContract(comparator.compare(maxValue, Binary.fromConstantByteBuffer(prevMaxValue)) <= 0,
+            Contract.MAX_DESCENDING,
+            () -> stringifier.stringify(maxValue),
+            () -> stringifier.stringify(Binary.fromConstantByteBuffer(prevMinValue)));
+        break;
+      case UNORDERED:
+        // No checks necessary.
+      }
     }
 
     void validateValue() {
@@ -226,6 +254,35 @@ public class ColumnIndexValidator {
       this.maxValue = maxValue.get(0) != 0;
     }
 
+    void validateBoundaryOrder(ByteBuffer prevMinValue, ByteBuffer prevMaxValue, BoundaryOrder boundaryOrder) {
+      boolean prevMinBool = prevMinValue.get(0) != 0;
+      boolean prevMaxBool = prevMaxValue.get(0) != 0;
+      switch (boundaryOrder) {
+      case ASCENDING:
+        validateContract(comparator.compare(minValue, prevMinBool) >= 0,
+            Contract.MIN_ASCENDING,
+            () -> stringifier.stringify(minValue),
+            () -> stringifier.stringify(prevMinBool));
+        validateContract(comparator.compare(maxValue, prevMaxBool) >= 0,
+            Contract.MAX_ASCENDING,
+            () -> stringifier.stringify(maxValue),
+            () -> stringifier.stringify(prevMaxBool));
+        break;
+      case DESCENDING:
+        validateContract(comparator.compare(minValue, prevMinBool) <= 0,
+            Contract.MIN_DESCENDING,
+            () -> stringifier.stringify(minValue),
+            () -> stringifier.stringify(prevMinBool));
+        validateContract(comparator.compare(maxValue, prevMaxBool) <= 0,
+            Contract.MAX_DESCENDING,
+            () -> stringifier.stringify(maxValue),
+            () -> stringifier.stringify(prevMaxBool));
+        break;
+      case UNORDERED:
+        // No checks necessary.
+      }
+    }
+
     void validateValue() {
       boolean value = columnReader.getBoolean();
       validateContract(!isNullPage,
@@ -248,8 +305,35 @@ public class ColumnIndexValidator {
     private double maxValue;
 
     public DoublePageValidator(ByteBuffer minValue, ByteBuffer maxValue) {
-      this.minValue = minValue.getDouble();
-      this.maxValue = maxValue.getDouble();
+      this.minValue = minValue.getDouble(0);
+      this.maxValue = maxValue.getDouble(0);
+    }
+
+    void validateBoundaryOrder(ByteBuffer prevMinValue, ByteBuffer prevMaxValue, BoundaryOrder boundaryOrder) {
+      switch (boundaryOrder) {
+      case ASCENDING:
+        validateContract(comparator.compare(minValue, prevMinValue.getDouble(0)) >= 0,
+            Contract.MIN_ASCENDING,
+            () -> stringifier.stringify(minValue),
+            () -> stringifier.stringify(prevMinValue.getDouble(0)));
+        validateContract(comparator.compare(maxValue, prevMaxValue.getDouble(0)) >= 0,
+            Contract.MAX_ASCENDING,
+            () -> stringifier.stringify(maxValue),
+            () -> stringifier.stringify(prevMinValue.getDouble(0)));
+        break;
+      case DESCENDING:
+        validateContract(comparator.compare(minValue, prevMinValue.getDouble(0)) <= 0,
+            Contract.MIN_DESCENDING,
+            () -> stringifier.stringify(minValue),
+            () -> stringifier.stringify(prevMinValue.getDouble(0)));
+        validateContract(comparator.compare(maxValue, prevMaxValue.getDouble(0)) <= 0,
+            Contract.MAX_DESCENDING,
+            () -> stringifier.stringify(maxValue),
+            () -> stringifier.stringify(prevMinValue.getDouble(0)));
+        break;
+      case UNORDERED:
+        // No checks necessary.
+      }
     }
 
     void validateValue() {
@@ -274,8 +358,35 @@ public class ColumnIndexValidator {
     private float maxValue;
 
     public FloatPageValidator(ByteBuffer minValue, ByteBuffer maxValue) {
-      this.minValue = minValue.getFloat();
-      this.maxValue = maxValue.getFloat();
+      this.minValue = minValue.getFloat(0);
+      this.maxValue = maxValue.getFloat(0);
+    }
+
+    void validateBoundaryOrder(ByteBuffer prevMinValue, ByteBuffer prevMaxValue, BoundaryOrder boundaryOrder) {
+      switch (boundaryOrder) {
+      case ASCENDING:
+        validateContract(comparator.compare(minValue, prevMinValue.getFloat(0)) >= 0,
+            Contract.MIN_ASCENDING,
+            () -> stringifier.stringify(minValue),
+            () -> stringifier.stringify(prevMinValue.getFloat(0)));
+        validateContract(comparator.compare(maxValue, prevMaxValue.getFloat(0)) >= 0,
+            Contract.MAX_ASCENDING,
+            () -> stringifier.stringify(maxValue),
+            () -> stringifier.stringify(prevMinValue.getFloat(0)));
+        break;
+      case DESCENDING:
+        validateContract(comparator.compare(minValue, prevMinValue.getFloat(0)) <= 0,
+            Contract.MIN_DESCENDING,
+            () -> stringifier.stringify(minValue),
+            () -> stringifier.stringify(prevMinValue.getFloat(0)));
+        validateContract(comparator.compare(maxValue, prevMaxValue.getFloat(0)) <= 0,
+            Contract.MAX_DESCENDING,
+            () -> stringifier.stringify(maxValue),
+            () -> stringifier.stringify(prevMinValue.getFloat(0)));
+        break;
+      case UNORDERED:
+        // No checks necessary.
+      }
     }
 
     void validateValue() {
@@ -300,31 +411,31 @@ public class ColumnIndexValidator {
     private int maxValue;
 
     public IntPageValidator(ByteBuffer minValue, ByteBuffer maxValue) {
-      this.minValue = minValue.getInt();
-      this.maxValue = maxValue.getInt();
+      this.minValue = minValue.getInt(0);
+      this.maxValue = maxValue.getInt(0);
     }
 
     void validateBoundaryOrder(ByteBuffer prevMinValue, ByteBuffer prevMaxValue, BoundaryOrder boundaryOrder) {
       switch (boundaryOrder) {
       case ASCENDING:
-        validateContract(minValue >= prevMinValue.getInt(),
+        validateContract(minValue >= prevMinValue.getInt(0),
             Contract.MIN_ASCENDING,
             () -> stringifier.stringify(minValue),
-            () -> stringifier.stringify(prevMinValue.getInt()));
-        validateContract(maxValue >= prevMaxValue.getInt(),
+            () -> stringifier.stringify(prevMinValue.getInt(0)));
+        validateContract(maxValue >= prevMaxValue.getInt(0),
             Contract.MAX_ASCENDING,
             () -> stringifier.stringify(minValue),
-            () -> stringifier.stringify(prevMinValue.getInt()));
+            () -> stringifier.stringify(prevMinValue.getInt(0)));
         break;
       case DESCENDING:
-        validateContract(minValue <= prevMinValue.getInt(),
+        validateContract(minValue <= prevMinValue.getInt(0),
             Contract.MIN_DESCENDING,
             () -> stringifier.stringify(minValue),
-            () -> stringifier.stringify(prevMinValue.getInt()));
-        validateContract(maxValue <= prevMaxValue.getInt(),
+            () -> stringifier.stringify(prevMinValue.getInt(0)));
+        validateContract(maxValue <= prevMaxValue.getInt(0),
             Contract.MAX_DESCENDING,
             () -> stringifier.stringify(minValue),
-          () -> stringifier.stringify(prevMinValue.getInt()));
+            () -> stringifier.stringify(prevMinValue.getInt(0)));
         break;
       case UNORDERED:
         // No checks necessary.
@@ -355,6 +466,33 @@ public class ColumnIndexValidator {
     public LongPageValidator(ByteBuffer minValue, ByteBuffer maxValue) {
       this.minValue = minValue.getLong();
       this.maxValue = maxValue.getLong();
+    }
+
+    void validateBoundaryOrder(ByteBuffer prevMinValue, ByteBuffer prevMaxValue, BoundaryOrder boundaryOrder) {
+      switch (boundaryOrder) {
+      case ASCENDING:
+        validateContract(minValue >= prevMinValue.getLong(0),
+            Contract.MIN_ASCENDING,
+            () -> stringifier.stringify(minValue),
+            () -> stringifier.stringify(prevMinValue.getLong(0)));
+        validateContract(maxValue >= prevMaxValue.getLong(0),
+            Contract.MAX_ASCENDING,
+            () -> stringifier.stringify(minValue),
+            () -> stringifier.stringify(prevMinValue.getLong(0)));
+        break;
+      case DESCENDING:
+        validateContract(minValue <= prevMinValue.getLong(0),
+            Contract.MIN_DESCENDING,
+            () -> stringifier.stringify(minValue),
+            () -> stringifier.stringify(prevMinValue.getLong(0)));
+        validateContract(maxValue <= prevMaxValue.getLong(0),
+            Contract.MAX_DESCENDING,
+            () -> stringifier.stringify(minValue),
+            () -> stringifier.stringify(prevMinValue.getLong(0)));
+        break;
+      case UNORDERED:
+        // No checks necessary.
+      }
     }
 
     void validateValue() {

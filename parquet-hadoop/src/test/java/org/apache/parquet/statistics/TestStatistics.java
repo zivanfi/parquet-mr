@@ -74,7 +74,7 @@ import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.assertEquals;
 
 public class TestStatistics {
-  private static final int MEGABYTE = 1 << 20;
+  private static final int KILOBYTE = 1 << 17;
   private static final long RANDOM_SEED = System.currentTimeMillis();
 
   public static class DataGenerationContext {
@@ -523,8 +523,8 @@ public class TestStatistics {
 
     Random random = new Random(RANDOM_SEED);
 
-    int blockSize =(random.nextInt(54) + 10) * MEGABYTE;
-    int pageSize = (random.nextInt(10) + 1) * MEGABYTE;
+    int blockSize =(random.nextInt(54) + 10) * KILOBYTE;
+    int pageSize = (random.nextInt(10) + 1) * KILOBYTE;
 
     List<DataContext> contexts = Arrays.asList(
         new DataContext(random.nextLong(), file, blockSize,
