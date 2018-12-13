@@ -61,6 +61,7 @@ import org.junit.rules.TemporaryFolder;
 import java.io.File;
 import java.io.IOException;
 import java.math.BigInteger;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Comparator;
 import java.util.List;
@@ -74,7 +75,7 @@ import static org.junit.Assert.assertEquals;
 
 public class TestStatistics {
   private static final int MEGABYTE = 1 << 20;
-  private static final long RANDOM_SEED = 1441990701846L; //System.currentTimeMillis();
+  private static final long RANDOM_SEED = System.currentTimeMillis();
 
   public static class DataGenerationContext {
     public static abstract class WriteContext {
@@ -367,8 +368,8 @@ public class TestStatistics {
           new RandomValues.UnconstrainedIntGenerator(random.nextLong()),
           new RandomValues.UnconstrainedLongGenerator(random.nextLong()),
           new RandomValues.UnconstrainedLongGenerator(random.nextLong()),
-          new RandomValues.UnconstrainedIntGenerator(random.nextLong()),
-          new RandomValues.UnconstrainedLongGenerator(random.nextLong()),
+          wrapSorted(new RandomValues.UnconstrainedIntGenerator(random.nextLong()), recordCount, true),
+          wrapSorted(new RandomValues.UnconstrainedLongGenerator(random.nextLong()), recordCount, false),
           new RandomValues.FixedGenerator(random.nextLong(), fixedLength),
           new RandomValues.BinaryGenerator(random.nextLong()),
           new RandomValues.StringGenerator(random.nextLong()),
@@ -382,6 +383,27 @@ public class TestStatistics {
           new RandomValues.LongGenerator(random.nextLong()),
           new RandomValues.FixedGenerator(random.nextLong(), 12)
       );
+    }
+
+    private static <T extends Comparable<T>> RandomValueGenerator<T> wrapSorted(RandomValueGenerator<T> generator,
+        int recordCount, boolean ascending) {
+      List<T> values = new ArrayList<>(recordCount);
+      for (int i = 0; i < recordCount; ++i) {
+        values.add(generator.nextValue());
+      }
+      if (ascending) {
+        values.sort(null);
+      } else {
+        values.sort((a, b) -> -a.compareTo(b));
+      }
+      return new RandomValueGenerator<T>(RANDOM_SEED) {
+        private int i;
+
+        @Override
+        public T nextValue() {
+          return values.get(i++);
+        }
+      };
     }
 
     private static MessageType buildSchema(long seed) {
