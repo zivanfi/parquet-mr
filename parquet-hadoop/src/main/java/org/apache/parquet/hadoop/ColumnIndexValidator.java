@@ -47,42 +47,43 @@ import org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName;
 class ColumnIndexValidator {
 
   public enum Contract {
-    MIN_SMALLER_THAN_ALL_VALUES(
-        "The min value \"%1$s\" is larger than the value \"%2$s\" at row group %3$d, column %4$d, page %5$d"),
-    MAX_LARGER_THAN_ALL_VALUES(
-        "The max value \"%1$s\" is less than the value \"%2$s\" at row group %3$d, column %4$d, page %5$d"),
-    NULL_COUNT_CORRECT(
-        "The null count \"%1$s\" is not equal to the actual number of nulls \"%2$s\" at row group %3$d, column %4$d, page %5$d");
+    MIN_LTEQ_VALUE("The min value stored in the index must be less than or equal to all values."),
+    MAX_GTEQ_VALUE("The max value stored in the index must be greater than or equal to all values."),
+    NULL_COUNT_CORRECT("The null count stored in the index must be equal to the number of nulls."),
+    NULL_PAGE_HAS_NO_VALUES("Only pages consisting entirely of NULL-s can be marked as a null page in the index.");
     // TODO: More
-    public final String violationPattern;
+    public final String description;
 
-    Contract(String violationPattern) {
-      this.violationPattern = violationPattern;
+    Contract(String description) {
+      this.description = description;
     }
   }
 
   public static class ContractViolation {
-    public ContractViolation(Contract violatedContract, String constraintValueAsString, String violatingValueAsString,
+    public ContractViolation(Contract violatedContract, String valueFromIndex, String valueFromPage,
         int rowGroupNumber, int columnNumber, int pageNumber) {
       this.violatedContract = violatedContract;
-      this.constraintValueAsString = constraintValueAsString;
-      this.violatingValueAsString = violatingValueAsString;
+      this.valueFromIndex = valueFromIndex;
+      this.valueFromPage = valueFromPage;
       this.rowGroupNumber = rowGroupNumber;
       this.columnNumber = columnNumber;
       this.pageNumber = pageNumber;
     }
 
     public Contract violatedContract;
-    public String constraintValueAsString;
-    public String violatingValueAsString;
+    public String valueFromIndex;
+    public String valueFromPage;
     public int rowGroupNumber;
     public int columnNumber;
     public int pageNumber;
 
     @Override
     public String toString() {
-      return String.format(violatedContract.violationPattern, constraintValueAsString, violatingValueAsString,
-          rowGroupNumber, columnNumber, pageNumber);
+      return String.format("Contract violation\nLocation: row group %d, column %d, page %d\nViolated contract: %s\nCorresponding value from the index: %s\nOffending value from the page: %s\n",
+          rowGroupNumber, columnNumber, pageNumber,
+          violatedContract.description,
+          valueFromIndex,
+          valueFromPage);
     }
   }
 
@@ -94,10 +95,11 @@ class ColumnIndexValidator {
         int pageNumber,
         List<ContractViolation> violations,
         ColumnReader columnReader,
-        long nullCount,
         ByteBuffer minValue,
-        ByteBuffer maxValue) {
-      PageValidator pageValidator = createTypedValidator(type.getPrimitiveTypeName(), minValue, maxValue);
+        ByteBuffer maxValue,
+        long nullCount,
+        boolean isNullPage) {
+      PageValidator pageValidator = createTypeSpecificValidator(type.getPrimitiveTypeName(), minValue, maxValue);
       pageValidator.comparator = type.comparator();
       pageValidator.stringifier = type.stringifier();
       pageValidator.columnReader = columnReader;
@@ -106,12 +108,13 @@ class ColumnIndexValidator {
       pageValidator.pageNumber = pageNumber;
       pageValidator.nullCountInIndex = nullCount;
       pageValidator.nullCountActual = 0;
+      pageValidator.isNullPage = isNullPage;
       pageValidator.maxDefinitionLevel = columnReader.getDescriptor().getMaxDefinitionLevel();
       pageValidator.violations = violations;
       return pageValidator;
     }
 
-    private static PageValidator createTypedValidator(PrimitiveTypeName type, ByteBuffer minValue,
+    private static PageValidator createTypeSpecificValidator(PrimitiveTypeName type, ByteBuffer minValue,
         ByteBuffer maxValue) {
       switch (type) {
       case BINARY:
@@ -152,11 +155,11 @@ class ColumnIndexValidator {
 
     void validateContract(boolean contractCondition,
         Contract type,
-        Supplier<String> constraintValueAsString,
-        Supplier<String> violatingValueAsString) {
+        Supplier<String> valueFromIndex,
+        Supplier<String> valueFromPage) {
       if (!contractCondition) {
         violations.add(
-            new ContractViolation(type, constraintValueAsString.get(), violatingValueAsString.get(), rowGroupNumber,
+            new ContractViolation(type, valueFromIndex.get(), valueFromPage.get(), rowGroupNumber,
                 columnNumber, pageNumber));
       }
     }
@@ -171,6 +174,7 @@ class ColumnIndexValidator {
     protected int maxDefinitionLevel;
     protected long nullCountInIndex;
     protected long nullCountActual;
+    protected boolean isNullPage;
     protected ColumnReader columnReader;
     protected List<ContractViolation> violations;
   }
@@ -186,12 +190,16 @@ class ColumnIndexValidator {
 
     void validateValue() {
       Binary value = columnReader.getBinary();
+      validateContract(!isNullPage,
+          Contract.NULL_PAGE_HAS_NO_VALUES,
+          () -> stringifier.stringify(value),
+          () -> "N/A");
       validateContract(comparator.compare(value, minValue) >= 0,
-          Contract.MIN_SMALLER_THAN_ALL_VALUES,
+          Contract.MIN_LTEQ_VALUE,
           () -> stringifier.stringify(value),
           () -> stringifier.stringify(minValue));
       validateContract(comparator.compare(value, maxValue) <= 0,
-          Contract.MAX_LARGER_THAN_ALL_VALUES,
+          Contract.MAX_GTEQ_VALUE,
           () -> stringifier.stringify(value),
           () -> stringifier.stringify(minValue));
     }
@@ -208,12 +216,16 @@ class ColumnIndexValidator {
 
     void validateValue() {
       boolean value = columnReader.getBoolean();
+      validateContract(!isNullPage,
+          Contract.NULL_PAGE_HAS_NO_VALUES,
+          () -> stringifier.stringify(value),
+          () -> "N/A");
       validateContract(comparator.compare(value, minValue) >= 0,
-          Contract.MIN_SMALLER_THAN_ALL_VALUES,
+          Contract.MIN_LTEQ_VALUE,
           () -> stringifier.stringify(value),
           () -> stringifier.stringify(minValue));
       validateContract(comparator.compare(value, maxValue) <= 0,
-          Contract.MAX_LARGER_THAN_ALL_VALUES,
+          Contract.MAX_GTEQ_VALUE,
           () -> stringifier.stringify(value),
           () -> stringifier.stringify(minValue));
     }
@@ -230,12 +242,16 @@ class ColumnIndexValidator {
 
     void validateValue() {
       double value = columnReader.getDouble();
+      validateContract(!isNullPage,
+          Contract.NULL_PAGE_HAS_NO_VALUES,
+          () -> stringifier.stringify(value),
+          () -> "N/A");
       validateContract(comparator.compare(value, minValue) >= 0,
-          Contract.MIN_SMALLER_THAN_ALL_VALUES,
+          Contract.MIN_LTEQ_VALUE,
           () -> stringifier.stringify(value),
           () -> stringifier.stringify(minValue));
       validateContract(comparator.compare(value, maxValue) <= 0,
-          Contract.MAX_LARGER_THAN_ALL_VALUES,
+          Contract.MAX_GTEQ_VALUE,
           () -> stringifier.stringify(value),
           () -> stringifier.stringify(minValue));
     }
@@ -252,12 +268,16 @@ class ColumnIndexValidator {
 
     void validateValue() {
       float value = columnReader.getFloat();
+      validateContract(!isNullPage,
+          Contract.NULL_PAGE_HAS_NO_VALUES,
+          () -> stringifier.stringify(value),
+          () -> "N/A");
       validateContract(comparator.compare(value, minValue) >= 0,
-          Contract.MIN_SMALLER_THAN_ALL_VALUES,
+          Contract.MIN_LTEQ_VALUE,
           () -> stringifier.stringify(value),
           () -> stringifier.stringify(minValue));
       validateContract(comparator.compare(value, maxValue) <= 0,
-          Contract.MAX_LARGER_THAN_ALL_VALUES,
+          Contract.MAX_GTEQ_VALUE,
           () -> stringifier.stringify(value),
           () -> stringifier.stringify(minValue));
     }
@@ -274,20 +294,18 @@ class ColumnIndexValidator {
 
     void validateValue() {
       int value = columnReader.getInteger();
+      validateContract(!isNullPage,
+          Contract.NULL_PAGE_HAS_NO_VALUES,
+          () -> stringifier.stringify(value),
+          () -> "N/A");
       validateContract(comparator.compare(value, minValue) >= 0,
-          Contract.MIN_SMALLER_THAN_ALL_VALUES,
+          Contract.MIN_LTEQ_VALUE,
           () -> stringifier.stringify(value),
           () -> stringifier.stringify(minValue));
       validateContract(comparator.compare(value, maxValue) <= 0,
-          Contract.MAX_LARGER_THAN_ALL_VALUES,
+          Contract.MAX_GTEQ_VALUE,
           () -> stringifier.stringify(value),
           () -> stringifier.stringify(minValue));
-if (comparator.compare(value, maxValue) == 0) {
-  validateContract(comparator.compare(value, maxValue) > 0,
-      Contract.MAX_LARGER_THAN_ALL_VALUES,
-      () -> stringifier.stringify(value),
-      () -> stringifier.stringify(minValue));
-}
     }
   }
 
@@ -302,12 +320,16 @@ if (comparator.compare(value, maxValue) == 0) {
 
     void validateValue() {
       long value = columnReader.getLong();
+      validateContract(!isNullPage,
+          Contract.NULL_PAGE_HAS_NO_VALUES,
+          () -> stringifier.stringify(value),
+          () -> "N/A");
       validateContract(comparator.compare(value, minValue) >= 0,
-          Contract.MIN_SMALLER_THAN_ALL_VALUES,
+          Contract.MIN_LTEQ_VALUE,
           () -> stringifier.stringify(value),
           () -> stringifier.stringify(minValue));
       validateContract(comparator.compare(value, maxValue) <= 0,
-          Contract.MAX_LARGER_THAN_ALL_VALUES,
+          Contract.MAX_GTEQ_VALUE,
           () -> stringifier.stringify(value),
           () -> stringifier.stringify(minValue));
     }
@@ -341,7 +363,7 @@ if (comparator.compare(value, maxValue) == 0) {
         List<ByteBuffer> maxValues = columnIndex.getMaxValues();
         // BoundaryOrder boundaryOrder = columnIndex.getBoundaryOrder();
         List<Long> nullCounts = columnIndex.getNullCounts();
-        // List<Boolean> nullPages = columnIndex.getNullPages();
+        List<Boolean> nullPages = columnIndex.getNullPages();
         long rowNumber = 0;
         ColumnReader columnReader = columnReadStore.getColumnReader(column);
         for (int pageNumber = 0; pageNumber < offsetIndex.getPageCount(); ++pageNumber) {
@@ -349,9 +371,10 @@ if (comparator.compare(value, maxValue) == 0) {
               column.getPrimitiveType(),
               rowGroupNumber, columnNumber, pageNumber,
               violations, columnReader,
-              nullCounts.get(pageNumber),
               minValues.get(pageNumber),
-              maxValues.get(pageNumber));
+              maxValues.get(pageNumber),
+              nullCounts.get(pageNumber),
+              nullPages.get(pageNumber));
           long lastRowNumberInPage = offsetIndex.getLastRowIndex(pageNumber, rowGroup.getRowCount());
           while (rowNumber <= lastRowNumberInPage) {
             pageValidator.validateValuesBelongingToRow();

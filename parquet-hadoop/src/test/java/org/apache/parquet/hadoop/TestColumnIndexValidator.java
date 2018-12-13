@@ -31,6 +31,6 @@ public class TestColumnIndexValidator {
   @Test
   public void test() throws IOException {
     System.out.println(ColumnIndexValidator.checkContractViolations(
-        HadoopInputFile.fromPath(new Path("/home/gabor/dev/ci_v2-dict.parquet"), new Configuration())));
+        HadoopInputFile.fromPath(new Path("/home/zi/Downloads/ci_v2-dict.parquet"), new Configuration())));
   }
 }
