@@ -298,21 +298,21 @@ public class ColumnIndexValidator {
     public IntPageValidator(ByteBuffer minValue, ByteBuffer maxValue, ByteBuffer prevMinValue, ByteBuffer prevMaxValue, BoundaryOrder boundaryOrder) {
       switch (boundaryOrder) {
       case ASCENDING:
-        validateContract(prevMinValue == null || minValue.getInt() > prevMinValue.getInt(),
+        validateContract(prevMinValue == null || minValue.getInt() >= prevMinValue.getInt(),
             Contract.MIN_ASCENDING,
             () -> stringifier.stringify(minValue.getInt()),
             () -> stringifier.stringify(prevMinValue.getInt()));
-        validateContract(prevMaxValue == null || maxValue.getInt() > prevMaxValue.getInt(),
+        validateContract(prevMaxValue == null || maxValue.getInt() >= prevMaxValue.getInt(),
             Contract.MAX_ASCENDING,
             () -> stringifier.stringify(maxValue.getInt()),
             () -> stringifier.stringify(prevMaxValue.getInt()));
         break;
       case DESCENDING:
-        validateContract(prevMinValue == null || minValue.getInt() < prevMinValue.getInt(),
+        validateContract(prevMinValue == null || minValue.getInt() <= prevMinValue.getInt(),
         Contract.MIN_DESCENDING,
         () -> stringifier.stringify(minValue.getInt()),
         () -> stringifier.stringify(prevMinValue.getInt()));
-    validateContract(prevMaxValue == null || maxValue.getInt() < prevMaxValue.getInt(),
+    validateContract(prevMaxValue == null || maxValue.getInt() <= prevMaxValue.getInt(),
         Contract.MAX_DESCENDING,
         () -> stringifier.stringify(maxValue.getInt()),
         () -> stringifier.stringify(prevMaxValue.getInt()));
