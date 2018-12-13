@@ -34,11 +34,14 @@ import org.apache.parquet.column.statistics.Statistics;
 import org.apache.parquet.example.data.Group;
 import org.apache.parquet.example.data.simple.SimpleGroup;
 import org.apache.parquet.format.converter.ParquetMetadataConverter;
+import org.apache.parquet.hadoop.ColumnIndexValidator;
+import org.apache.parquet.hadoop.ColumnIndexValidator.ContractViolation;
 import org.apache.parquet.hadoop.ParquetFileReader;
 import org.apache.parquet.hadoop.ParquetWriter;
 import org.apache.parquet.hadoop.example.GroupWriteSupport;
 import org.apache.parquet.hadoop.metadata.CompressionCodecName;
 import org.apache.parquet.hadoop.metadata.ParquetMetadata;
+import org.apache.parquet.hadoop.util.HadoopInputFile;
 import org.apache.parquet.io.api.Binary;
 import org.apache.parquet.io.api.PrimitiveConverter;
 import org.apache.parquet.schema.MessageType;
@@ -49,6 +52,7 @@ import org.apache.parquet.schema.Type;
 import org.apache.parquet.schema.Types;
 import org.apache.parquet.statistics.RandomValues.RandomBinaryBase;
 import org.apache.parquet.statistics.RandomValues.RandomValueGenerator;
+import org.hamcrest.CoreMatchers;
 import org.junit.Assert;
 import org.junit.Rule;
 import org.junit.Test;
@@ -476,18 +480,23 @@ public class TestStatistics {
       Configuration configuration = new Configuration();
       ParquetMetadata metadata = ParquetFileReader.readFooter(configuration,
           super.fsPath, ParquetMetadataConverter.NO_FILTER);
-      ParquetFileReader reader = new ParquetFileReader(configuration,
+      try (ParquetFileReader reader = new ParquetFileReader(configuration,
         metadata.getFileMetaData(),
         super.fsPath,
         metadata.getBlocks(),
-        metadata.getFileMetaData().getSchema().getColumns());
+        metadata.getFileMetaData().getSchema().getColumns())) {
 
-      PageStatsValidator validator = new PageStatsValidator();
+        PageStatsValidator validator = new PageStatsValidator();
 
-      PageReadStore pageReadStore;
-      while ((pageReadStore = reader.readNextRowGroup()) != null) {
-        validator.validate(metadata.getFileMetaData().getSchema(), pageReadStore);
+        PageReadStore pageReadStore;
+        while ((pageReadStore = reader.readNextRowGroup()) != null) {
+          validator.validate(metadata.getFileMetaData().getSchema(), pageReadStore);
+        }
       }
+
+      List<ContractViolation> violations = ColumnIndexValidator
+          .checkContractViolations(HadoopInputFile.fromPath(fsPath, configuration));
+      assertTrue(violations.toString(), violations.isEmpty());
     }
   }
 

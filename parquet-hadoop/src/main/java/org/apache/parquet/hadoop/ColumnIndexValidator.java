@@ -44,7 +44,7 @@ import org.apache.parquet.schema.PrimitiveStringifier;
 import org.apache.parquet.schema.PrimitiveType;
 import org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName;
 
-class ColumnIndexValidator {
+public class ColumnIndexValidator {
 
   public enum Contract {
     MIN_LTEQ_VALUE("The min value stored in the index must be less than or equal to all values."),
