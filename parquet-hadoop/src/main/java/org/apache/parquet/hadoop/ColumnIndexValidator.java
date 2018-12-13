@@ -44,7 +44,7 @@ import org.apache.parquet.schema.PrimitiveStringifier;
 import org.apache.parquet.schema.PrimitiveType;
 import org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName;
 
-class ColumnIndexValidator {
+public class ColumnIndexValidator {
 
   public enum Contract {
     MIN_SMALLER_THAN_ALL_VALUES(
@@ -282,12 +282,6 @@ class ColumnIndexValidator {
           Contract.MAX_LARGER_THAN_ALL_VALUES,
           () -> stringifier.stringify(value),
           () -> stringifier.stringify(minValue));
-if (comparator.compare(value, maxValue) == 0) {
-  validateContract(comparator.compare(value, maxValue) > 0,
-      Contract.MAX_LARGER_THAN_ALL_VALUES,
-      () -> stringifier.stringify(value),
-      () -> stringifier.stringify(minValue));
-}
     }
   }
 
