@@ -398,18 +398,27 @@ public class ColumnIndexValidator {
         List<Boolean> nullPages = columnIndex.getNullPages();
         long rowNumber = 0;
         ColumnReader columnReader = columnReadStore.getColumnReader(column);
+        ByteBuffer prevMinValue = null;
+        ByteBuffer prevMaxValue = null;
         for (int pageNumber = 0; pageNumber < offsetIndex.getPageCount(); ++pageNumber) {
+          boolean isNullPage = nullPages.get(pageNumber);
+          ByteBuffer minValue = minValues.get(pageNumber);
+          ByteBuffer maxValue = maxValues.get(pageNumber);
           PageValidator pageValidator = PageValidator.createPageValidator(
               column.getPrimitiveType(),
               rowGroupNumber, columnNumber, pageNumber,
               violations, columnReader,
-              minValues.get(pageNumber),
-              maxValues.get(pageNumber),
-              pageNumber > 0 ? minValues.get(pageNumber) : null,
-              pageNumber > 0 ? maxValues.get(pageNumber) : null,
+              minValue,
+              maxValue,
+              prevMinValue,
+              prevMaxValue,
               boundaryOrder,
               nullCounts.get(pageNumber),
-              nullPages.get(pageNumber));
+              isNullPage);
+          if (!isNullPage) {
+            prevMinValue = minValue;
+            prevMaxValue = maxValue;
+          }
           long lastRowNumberInPage = offsetIndex.getLastRowIndex(pageNumber, rowGroup.getRowCount());
           while (rowNumber <= lastRowNumberInPage) {
             pageValidator.validateValuesBelongingToRow();
