@@ -34,6 +34,7 @@ import org.apache.parquet.example.DummyRecordConverter;
 import org.apache.parquet.hadoop.metadata.BlockMetaData;
 import org.apache.parquet.hadoop.metadata.ColumnChunkMetaData;
 import org.apache.parquet.hadoop.metadata.FileMetaData;
+import org.apache.parquet.internal.column.columnindex.BoundaryOrder;
 import org.apache.parquet.internal.column.columnindex.ColumnIndex;
 import org.apache.parquet.internal.column.columnindex.OffsetIndex;
 import org.apache.parquet.io.InputFile;
@@ -50,8 +51,12 @@ public class ColumnIndexValidator {
     MIN_LTEQ_VALUE("The min value stored in the index must be less than or equal to all values."),
     MAX_GTEQ_VALUE("The max value stored in the index must be greater than or equal to all values."),
     NULL_COUNT_CORRECT("The null count stored in the index must be equal to the number of nulls."),
-    NULL_PAGE_HAS_NO_VALUES("Only pages consisting entirely of NULL-s can be marked as a null page in the index.");
-    // TODO: More
+    NULL_PAGE_HAS_NO_VALUES("Only pages consisting entirely of NULL-s can be marked as a null page in the index."),
+    MIN_ASCENDING("According to the ASCENDING boundary order, the min value for a page must be greater than or equal to the min value of the previous page."),
+    MAX_ASCENDING("According to the ASCENDING boundary order, the max value for a page must be greater than or equal to the max value of the previous page."),
+    MIN_DESCENDING("According to the DESCENDING boundary order, the min value for a page must be less than or equal to the min value of the previous page."),
+    MAX_DESCENDING("According to the DESCENDING boundary order, the max value for a page must be less than or equal to the max value of the previous page.");
+
     public final String description;
 
     Contract(String description) {
@@ -60,30 +65,30 @@ public class ColumnIndexValidator {
   }
 
   public static class ContractViolation {
-    public ContractViolation(Contract violatedContract, String valueFromIndex, String valueFromPage,
+    public ContractViolation(Contract violatedContract, String referenceValue, String offendingValue,
         int rowGroupNumber, int columnNumber, int pageNumber) {
       this.violatedContract = violatedContract;
-      this.valueFromIndex = valueFromIndex;
-      this.valueFromPage = valueFromPage;
+      this.referenceValue = referenceValue;
+      this.offendingValue = offendingValue;
       this.rowGroupNumber = rowGroupNumber;
       this.columnNumber = columnNumber;
       this.pageNumber = pageNumber;
     }
 
     public Contract violatedContract;
-    public String valueFromIndex;
-    public String valueFromPage;
+    public String referenceValue;
+    public String offendingValue;
     public int rowGroupNumber;
     public int columnNumber;
     public int pageNumber;
 
     @Override
     public String toString() {
-      return String.format("Contract violation\nLocation: row group %d, column %d, page %d\nViolated contract: %s\nCorresponding value from the index: %s\nOffending value from the page: %s\n",
+      return String.format("Contract violation\nLocation: row group %d, column %d, page %d\nViolated contract: %s\nReference value: %s\nOffending value: %s\n",
           rowGroupNumber, columnNumber, pageNumber,
           violatedContract.description,
-          valueFromIndex,
-          valueFromPage);
+          referenceValue,
+          offendingValue);
     }
   }
 
@@ -97,9 +102,12 @@ public class ColumnIndexValidator {
         ColumnReader columnReader,
         ByteBuffer minValue,
         ByteBuffer maxValue,
+        ByteBuffer prevMinValue,
+        ByteBuffer prevMaxValue,
+        BoundaryOrder boundaryOrder,
         long nullCount,
         boolean isNullPage) {
-      PageValidator pageValidator = createTypeSpecificValidator(type.getPrimitiveTypeName(), minValue, maxValue);
+      PageValidator pageValidator = createTypeSpecificValidator(type.getPrimitiveTypeName(), minValue, maxValue, prevMinValue, prevMaxValue, boundaryOrder);
       pageValidator.comparator = type.comparator();
       pageValidator.stringifier = type.stringifier();
       pageValidator.columnReader = columnReader;
@@ -115,21 +123,21 @@ public class ColumnIndexValidator {
     }
 
     private static PageValidator createTypeSpecificValidator(PrimitiveTypeName type, ByteBuffer minValue,
-        ByteBuffer maxValue) {
+      ByteBuffer maxValue, ByteBuffer prevMinValue, ByteBuffer prevMaxValue, BoundaryOrder boundaryOrder) {
       switch (type) {
       case BINARY:
       case FIXED_LEN_BYTE_ARRAY:
-        return new BinaryPageValidator(minValue, maxValue);
+        return new BinaryPageValidator(minValue, maxValue, prevMinValue, prevMaxValue, boundaryOrder);
       case BOOLEAN:
-        return new BooleanPageValidator(minValue, maxValue);
+        return new BooleanPageValidator(minValue, maxValue, prevMinValue, prevMaxValue, boundaryOrder);
       case DOUBLE:
-        return new DoublePageValidator(minValue, maxValue);
+        return new DoublePageValidator(minValue, maxValue, prevMinValue, prevMaxValue, boundaryOrder);
       case FLOAT:
-        return new FloatPageValidator(minValue, maxValue);
+        return new FloatPageValidator(minValue, maxValue, prevMinValue, prevMaxValue, boundaryOrder);
       case INT32:
-        return new IntPageValidator(minValue, maxValue);
+        return new IntPageValidator(minValue, maxValue, prevMinValue, prevMaxValue, boundaryOrder);
       case INT64:
-        return new LongPageValidator(minValue, maxValue);
+        return new LongPageValidator(minValue, maxValue, prevMinValue, prevMaxValue, boundaryOrder);
       default:
         throw new UnsupportedOperationException(String.format("Validation of %s type is not implemented", type));
       }
@@ -183,7 +191,7 @@ public class ColumnIndexValidator {
     private Binary minValue;
     private Binary maxValue;
 
-    public BinaryPageValidator(ByteBuffer minValue, ByteBuffer maxValue) {
+    public BinaryPageValidator(ByteBuffer minValue, ByteBuffer maxValue, ByteBuffer prevMinValue, ByteBuffer prevMaxValue, BoundaryOrder boundaryOrder) {
       this.minValue = Binary.fromConstantByteBuffer(minValue);
       this.maxValue = Binary.fromConstantByteBuffer(maxValue);
     }
@@ -209,7 +217,7 @@ public class ColumnIndexValidator {
     private boolean minValue;
     private boolean maxValue;
 
-    public BooleanPageValidator(ByteBuffer minValue, ByteBuffer maxValue) {
+    public BooleanPageValidator(ByteBuffer minValue, ByteBuffer maxValue, ByteBuffer prevMinValue, ByteBuffer prevMaxValue, BoundaryOrder boundaryOrder) {
       this.minValue = minValue.get(0) != 0;
       this.maxValue = maxValue.get(0) != 0;
     }
@@ -235,7 +243,7 @@ public class ColumnIndexValidator {
     private double minValue;
     private double maxValue;
 
-    public DoublePageValidator(ByteBuffer minValue, ByteBuffer maxValue) {
+    public DoublePageValidator(ByteBuffer minValue, ByteBuffer maxValue, ByteBuffer prevMinValue, ByteBuffer prevMaxValue, BoundaryOrder boundaryOrder) {
       this.minValue = minValue.getDouble();
       this.maxValue = maxValue.getDouble();
     }
@@ -261,7 +269,7 @@ public class ColumnIndexValidator {
     private float minValue;
     private float maxValue;
 
-    public FloatPageValidator(ByteBuffer minValue, ByteBuffer maxValue) {
+    public FloatPageValidator(ByteBuffer minValue, ByteBuffer maxValue, ByteBuffer prevMinValue, ByteBuffer prevMaxValue, BoundaryOrder boundaryOrder) {
       this.minValue = minValue.getFloat();
       this.maxValue = maxValue.getFloat();
     }
@@ -287,7 +295,32 @@ public class ColumnIndexValidator {
     private int minValue;
     private int maxValue;
 
-    public IntPageValidator(ByteBuffer minValue, ByteBuffer maxValue) {
+    public IntPageValidator(ByteBuffer minValue, ByteBuffer maxValue, ByteBuffer prevMinValue, ByteBuffer prevMaxValue, BoundaryOrder boundaryOrder) {
+      switch (boundaryOrder) {
+      case ASCENDING:
+        validateContract(prevMinValue == null || minValue.getInt() > prevMinValue.getInt(),
+            Contract.MIN_ASCENDING,
+            () -> stringifier.stringify(minValue.getInt()),
+            () -> stringifier.stringify(prevMinValue.getInt()));
+        validateContract(prevMaxValue == null || maxValue.getInt() > prevMaxValue.getInt(),
+            Contract.MAX_ASCENDING,
+            () -> stringifier.stringify(maxValue.getInt()),
+            () -> stringifier.stringify(prevMaxValue.getInt()));
+        break;
+      case DESCENDING:
+        validateContract(prevMinValue == null || minValue.getInt() < prevMinValue.getInt(),
+        Contract.MIN_DESCENDING,
+        () -> stringifier.stringify(minValue.getInt()),
+        () -> stringifier.stringify(prevMinValue.getInt()));
+    validateContract(prevMaxValue == null || maxValue.getInt() < prevMaxValue.getInt(),
+        Contract.MAX_DESCENDING,
+        () -> stringifier.stringify(maxValue.getInt()),
+        () -> stringifier.stringify(prevMaxValue.getInt()));
+        break;
+      case UNORDERED:
+        // No checks necessary.
+      }
+
       this.minValue = minValue.getInt();
       this.maxValue = maxValue.getInt();
     }
@@ -313,7 +346,7 @@ public class ColumnIndexValidator {
     private long minValue;
     private long maxValue;
 
-    public LongPageValidator(ByteBuffer minValue, ByteBuffer maxValue) {
+    public LongPageValidator(ByteBuffer minValue, ByteBuffer maxValue, ByteBuffer prevMinValue, ByteBuffer prevMaxValue, BoundaryOrder boundaryOrder) {
       this.minValue = minValue.getLong();
       this.maxValue = maxValue.getLong();
     }
@@ -355,13 +388,12 @@ public class ColumnIndexValidator {
         ColumnChunkMetaData columnChunk = columnChunks.get(columnNumber);
         ColumnIndex columnIndex = reader.readColumnIndex(columnChunk);
         if (columnIndex == null) {
-          // TODO: we shall still check the offset index
           continue;
         }
         OffsetIndex offsetIndex = reader.readOffsetIndex(columnChunk);
         List<ByteBuffer> minValues = columnIndex.getMinValues();
         List<ByteBuffer> maxValues = columnIndex.getMaxValues();
-        // BoundaryOrder boundaryOrder = columnIndex.getBoundaryOrder();
+        BoundaryOrder boundaryOrder = columnIndex.getBoundaryOrder();
         List<Long> nullCounts = columnIndex.getNullCounts();
         List<Boolean> nullPages = columnIndex.getNullPages();
         long rowNumber = 0;
@@ -373,6 +405,9 @@ public class ColumnIndexValidator {
               violations, columnReader,
               minValues.get(pageNumber),
               maxValues.get(pageNumber),
+              pageNumber > 0 ? minValues.get(pageNumber) : null,
+              pageNumber > 0 ? maxValues.get(pageNumber) : null,
+              boundaryOrder,
               nullCounts.get(pageNumber),
               nullPages.get(pageNumber));
           long lastRowNumberInPage = offsetIndex.getLastRowIndex(pageNumber, rowGroup.getRowCount());
